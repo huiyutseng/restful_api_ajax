@@ -30,8 +30,8 @@ pip install -r requirements.txt
   - 沒有限制影片時間。
 - `100` 分條件 (基於 `80` 分條件)
     - 使用 `GitHub` 平台來提交作業，並且將 `github repo 連結` 以及 `影片連結` 連結寄給我。
-      - Git 與 GitHub 使用教學: [程式與網頁開發者必備技能！Git 和 GitHub 零基礎快速上手，輕鬆掌握版本控制的要訣！](https://www.youtube.com/watch?v=FKXRiAiQFiY)
-      - Markdown 語法: [如何使用 Markdown 語言撰寫技術文件](https://experienceleague.adobe.com/zh-hant/docs/contributor/contributor-guide/writing-essentials/markdown)
+      - [程式與網頁開發者必備技能！Git 和 GitHub 零基礎快速上手，輕鬆掌握版本控制的要訣！](https://www.youtube.com/watch?v=FKXRiAiQFiY)
+      - [How to use Markdown for writing technical documentation](https://experienceleague.adobe.com/en/docs/contributor/contributor-guide/writing-essentials/markdown)
     - 上傳大型檔案到 github 上，請參考：
       - [Git Large File Storage - An open source Git extension for versioning large files](https://git-lfs.com/)
       - [我如何使用 Git LFS 來託付大型 Git 檔案？](https://www.webdong.dev/zh-tw/post/how-i-use-git-lfs-to-manage-large-git-files/)
@@ -61,26 +61,15 @@ pip install -r requirements.txt
 
         ## 安裝套件
         - Flask==3.1.3
-        - requests==2.34.2
         - pandas==3.0.3
-        - ollama==0.6.2
-        - google-genai==2.8.0
-        - python-dotenv==1.2.2
-        - faiss-cpu==1.14.2
-        - sentence-transformers==5.5.1
-        - numpy==2.4.6
         - scikit-learn==1.9.0
         (版本號可用 pip list，或是 conda list 來檢視，上面是範例，你的可能跟我不一樣，請自行調整)
         ...
 
         ## 執行方法
-        ```python
-        # 初始化資料庫
         python init_db.py
-
-        # 執行 Flask 應用程式
         python app.py
-        ```
+        (或是其它你覺得比較好的執行方式，請自行調整)
 
         ## 說明
         (介紹你使用的模型，理想的超參數是哪些，剩下可以自由發揮)
@@ -92,7 +81,6 @@ pip install -r requirements.txt
         ...
 
         ## 其它你想要補充的資訊
-        ...
         ...
         ```
 - 沒交：`?` 分。
