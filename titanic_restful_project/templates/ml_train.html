@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <title>模型訓練</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+            max-width: 800px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            font-size: 14px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        button {
+            padding: 8px 16px;
+            font-size: 15px;
+        }
+
+        .status-box {
+            margin-top: 20px;
+            padding: 12px;
+            border: 1px solid #ccc;
+            max-width: 800px;
+        }
+
+        .status-idle {
+            color: #666;
+        }
+
+        .status-training {
+            color: #b8860b;
+            font-weight: bold;
+        }
+
+        .status-done {
+            color: green;
+            font-weight: bold;
+        }
+
+        .status-error {
+            color: red;
+            font-weight: bold;
+        }
+
+        .best-row {
+            background-color: #eaffea;
+            font-weight: bold;
+        }
+
+        a {
+            text-decoration: none;
+            color: blue;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>機器學習模型訓練</h1>
+    <p><a href="/">回首頁</a> | <a href="/ml/predict">前往乘客生存預測</a></p>
+
+    <p>
+        點擊下方按鈕，會使用 <code>titanic</code> 資料表的所有資料，
+        分別對 RandomForest 與 LogisticRegression 兩種模型進行 GridSearchCV 超參數調整，
+        並自動挑選測試準確率較高的模型儲存起來，供預測頁面使用。
+    </p>
+
+    <button id="trainBtn" onclick="startTraining()">開始訓練</button>
+
+    <div class="status-box">
+        <div>目前狀態：<span id="statusText" class="status-idle">尚未開始</span></div>
+        <div id="progressText"></div>
+        <div id="metaText"></div>
+    </div>
+
+    <div id="resultArea"></div>
+
+    <script>
+        let pollTimer = null;
+
+        // 點擊「開始訓練」按鈕，呼叫後端 API 啟動背景訓練
+        async function startTraining() {
+            const trainBtn = document.getElementById("trainBtn");
+            trainBtn.disabled = true;
+
+            const response = await fetch("/api/ml/train", {
+                method: "POST"
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                alert(result.error || "啟動訓練失敗");
+                trainBtn.disabled = false;
+                return;
+            }
+
+            startPolling();
+        }
+
+        // 每 1.5 秒查詢一次訓練狀態，直到訓練完成或發生錯誤
+        function startPolling() {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+            }
+
+            checkStatus();
+            pollTimer = setInterval(checkStatus, 1500);
+        }
+
+        // 呼叫後端 API 取得目前的訓練狀態，並更新畫面
+        async function checkStatus() {
+            const response = await fetch("/api/ml/train/status");
+            const state = await response.json();
+
+            renderStatus(state);
+
+            if (state.status !== "training") {
+                clearInterval(pollTimer);
+                pollTimer = null;
+                document.getElementById("trainBtn").disabled = false;
+            } else {
+                document.getElementById("trainBtn").disabled = true;
+
+                // 如果重新整理頁面時剛好在訓練中，也要自動開始輪詢
+                if (!pollTimer) {
+                    pollTimer = setInterval(checkStatus, 1500);
+                }
+            }
+        }
+
+        // 根據目前的訓練狀態，更新畫面上的文字與樣式
+        function renderStatus(state) {
+            const statusText = document.getElementById("statusText");
+            const progressText = document.getElementById("progressText");
+            const metaText = document.getElementById("metaText");
+
+            const statusMap = {
+                idle: ["尚未開始", "status-idle"],
+                training: ["訓練中...", "status-training"],
+                done: ["訓練完成", "status-done"],
+                error: ["訓練失敗", "status-error"]
+            };
+
+            const [label, cssClass] = statusMap[state.status] || [state.status, "status-idle"];
+            statusText.textContent = label;
+            statusText.className = cssClass;
+
+            progressText.textContent = state.progress || "";
+
+            if (state.status === "error") {
+                metaText.textContent = "錯誤訊息：" + state.error;
+            } else if (state.status === "done") {
+                metaText.textContent =
+                    `使用資料筆數：${state.n_samples}　開始時間：${state.started_at ?? ""}　完成時間：${state.finished_at ?? ""}`;
+            } else {
+                metaText.textContent = "";
+            }
+
+            renderResult(state);
+        }
+
+        // 訓練完成後，顯示每個候選模型的最佳超參數與準確率比較表
+        function renderResult(state) {
+            const resultArea = document.getElementById("resultArea");
+
+            if (state.status !== "done" || !state.candidates) {
+                resultArea.innerHTML = "";
+                return;
+            }
+
+            let rows = "";
+
+            for (const [name, info] of Object.entries(state.candidates)) {
+                const isBest = name === state.best_model_name;
+                const paramsText = JSON.stringify(info.best_params);
+
+                rows += `
+                    <tr class="${isBest ? "best-row" : ""}">
+                        <td>${name}${isBest ? "（最佳模型，已儲存）" : ""}</td>
+                        <td>${paramsText}</td>
+                        <td>${(info.cv_score * 100).toFixed(2)}%</td>
+                        <td>${(info.test_accuracy * 100).toFixed(2)}%</td>
+                    </tr>
+                `;
+            }
+
+            resultArea.innerHTML = `
+                <h2>超參數調整結果</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>模型</th>
+                            <th>最佳超參數</th>
+                            <th>交叉驗證準確率</th>
+                            <th>測試集準確率</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        // 頁面載入時，先查詢一次目前狀態（可能是先前訓練完成的結果，或正在訓練中）
+        checkStatus();
+    </script>
+</body>
+
+</html>

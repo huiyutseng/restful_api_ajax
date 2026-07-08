@@ -7,3 +7,5 @@ python-dotenv==1.2.2
 faiss-cpu==1.14.2
 sentence-transformers==5.5.1
 numpy==2.4.6
+scikit-learn==1.8.0
+joblib==1.5.3

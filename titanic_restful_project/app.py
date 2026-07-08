@@ -1,5 +1,21 @@
 import sqlite3
+import os
+import json
+import threading
+from datetime import datetime
+
+import pandas as pd
+import joblib
 from flask import Flask, jsonify, request, render_template
+
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
 
 app = Flask(__name__)
 
@@ -299,7 +315,288 @@ def delete_passenger(passenger_id):
 
 
 # ============================================================
-# 9. 啟動 Flask
+# 9. 機器學習：模型訓練與預測
+# ============================================================
+
+# 頁面：模型訓練
+@app.route("/ml/train")
+def ml_train_page():
+    return render_template("ml_train.html")
+
+# 頁面：乘客生存預測
+@app.route("/ml/predict")
+def ml_predict_page():
+    return render_template("ml_predict.html")
+
+
+# 用來訓練與預測的特徵欄位
+FEATURE_COLUMNS = ["Pclass", "Sex", "Age", "SibSp", "Parch", "Fare", "Embarked"]
+NUMERIC_FEATURES = ["Age", "Fare"]
+CATEGORICAL_FEATURES = ["Sex", "Embarked"]
+PASSTHROUGH_FEATURES = ["Pclass", "SibSp", "Parch"]
+
+
+def build_preprocessor():
+    """建立前處理流程：數值欄位補中位數，類別欄位補眾數後做 One-Hot Encoding。"""
+    return ColumnTransformer(transformers=[
+        ("num", SimpleImputer(strategy="median"), NUMERIC_FEATURES),
+        ("cat", Pipeline([
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+        ]), CATEGORICAL_FEATURES),
+        ("pass", SimpleImputer(strategy="most_frequent"), PASSTHROUGH_FEATURES),
+    ])
+
+
+# 兩個候選模型與各自要調整的超參數網格
+MODEL_CONFIGS = {
+    "RandomForest": {
+        "estimator": RandomForestClassifier(random_state=42),
+        "param_grid": {
+            "clf__n_estimators": [100, 200, 300],
+            "clf__max_depth": [None, 5, 10],
+            "clf__min_samples_split": [2, 5, 10],
+        },
+    },
+    "LogisticRegression": {
+        "estimator": LogisticRegression(max_iter=1000, solver="lbfgs"),
+        "param_grid": {
+            "clf__C": [0.01, 0.1, 1, 10],
+            "clf__class_weight": [None, "balanced"],
+        },
+    },
+}
+
+# 模型存放路徑：repo 根目錄下的 models/ 資料夾
+MODEL_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models")
+)
+MODEL_PATH = os.path.join(MODEL_DIR, "titanic_model.joblib")
+META_PATH = os.path.join(MODEL_DIR, "model_meta.json")
+os.makedirs(MODEL_DIR, exist_ok=True)
+
+# 目前記憶體中可用的模型（訓練完成後或伺服器啟動時載入）
+CURRENT_MODEL = None
+
+# 保護 TRAIN_STATE 讀寫的鎖，避免背景訓練執行緒與 API 讀取同時衝突
+TRAIN_LOCK = threading.Lock()
+
+TRAIN_STATE = {
+    "status": "idle",  # idle | training | done | error
+    "progress": "",
+    "started_at": None,
+    "finished_at": None,
+    "candidates": {},
+    "best_model_name": None,
+    "best_params": None,
+    "cv_score": None,
+    "test_accuracy": None,
+    "n_samples": None,
+    "error": None,
+}
+
+
+def load_saved_model():
+    """伺服器啟動時，如果先前已經訓練過模型，直接載入，讓頁面與預測功能立刻可用。"""
+    global CURRENT_MODEL
+
+    if os.path.exists(MODEL_PATH) and os.path.exists(META_PATH):
+        CURRENT_MODEL = joblib.load(MODEL_PATH)
+
+        with open(META_PATH, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
+        TRAIN_STATE.update(meta)
+        TRAIN_STATE["status"] = "done"
+        TRAIN_STATE["progress"] = ""
+
+
+load_saved_model()
+
+
+def run_training():
+    """在背景執行緒執行：讀取 titanic 資料表 -> 對兩個候選模型做 GridSearchCV -> 挑最佳者存檔。"""
+    global CURRENT_MODEL
+
+    with TRAIN_LOCK:
+        TRAIN_STATE["status"] = "training"
+        TRAIN_STATE["progress"] = "讀取資料中..."
+        TRAIN_STATE["started_at"] = datetime.now().isoformat(timespec="seconds")
+        TRAIN_STATE["finished_at"] = None
+        TRAIN_STATE["error"] = None
+        TRAIN_STATE["candidates"] = {}
+
+    try:
+        df = pd.read_sql("SELECT * FROM titanic", db)
+
+        X = df[FEATURE_COLUMNS]
+        y = df["Survived"]
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
+
+        candidates = {}
+        best_name = None
+        best_test_acc = -1.0
+        best_pipeline = None
+        best_params = None
+        best_cv_score = None
+
+        for name, config in MODEL_CONFIGS.items():
+            with TRAIN_LOCK:
+                TRAIN_STATE["progress"] = f"正在訓練 {name}（GridSearchCV 超參數調整中）..."
+
+            pipeline = Pipeline([
+                ("prep", build_preprocessor()),
+                ("clf", config["estimator"]),
+            ])
+
+            grid = GridSearchCV(
+                pipeline,
+                config["param_grid"],
+                cv=5,
+                scoring="accuracy",
+                n_jobs=-1,
+            )
+            grid.fit(X_train, y_train)
+
+            test_acc = float(accuracy_score(y_test, grid.predict(X_test)))
+            cv_score = float(grid.best_score_)
+
+            candidates[name] = {
+                "best_params": grid.best_params_,
+                "cv_score": cv_score,
+                "test_accuracy": test_acc,
+            }
+
+            if test_acc > best_test_acc:
+                best_test_acc = test_acc
+                best_name = name
+                best_pipeline = grid.best_estimator_
+                best_params = grid.best_params_
+                best_cv_score = cv_score
+
+        joblib.dump(best_pipeline, MODEL_PATH)
+
+        meta = {
+            "candidates": candidates,
+            "best_model_name": best_name,
+            "best_params": best_params,
+            "cv_score": best_cv_score,
+            "test_accuracy": best_test_acc,
+            "n_samples": len(df),
+        }
+
+        with open(META_PATH, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+        CURRENT_MODEL = best_pipeline
+
+        with TRAIN_LOCK:
+            TRAIN_STATE.update(meta)
+            TRAIN_STATE["status"] = "done"
+            TRAIN_STATE["progress"] = ""
+            TRAIN_STATE["finished_at"] = datetime.now().isoformat(timespec="seconds")
+
+    except Exception as e:
+        with TRAIN_LOCK:
+            TRAIN_STATE["status"] = "error"
+            TRAIN_STATE["progress"] = ""
+            TRAIN_STATE["error"] = str(e)
+            TRAIN_STATE["finished_at"] = datetime.now().isoformat(timespec="seconds")
+
+
+# API：一鍵開始訓練（背景執行，立即回應）
+# POST /api/ml/train
+@app.route("/api/ml/train", methods=["POST"])
+def start_training():
+    with TRAIN_LOCK:
+        if TRAIN_STATE["status"] == "training":
+            return jsonify({"error": "已有訓練正在進行中，請稍候"}), 409
+
+    thread = threading.Thread(target=run_training, daemon=True)
+    thread.start()
+
+    return jsonify({"message": "started"}), 202
+
+
+# API：查詢目前訓練狀態，前端用輪詢的方式呼叫
+# GET /api/ml/train/status
+@app.route("/api/ml/train/status", methods=["GET"])
+def get_training_status():
+    with TRAIN_LOCK:
+        return jsonify(dict(TRAIN_STATE)), 200
+
+
+def to_float_or_nan(value):
+    if value in (None, ""):
+        return float("nan")
+    return float(value)
+
+
+def build_feature_row(data):
+    return pd.DataFrame([{
+        "Pclass": int(data["Pclass"]),
+        "Sex": data["Sex"],
+        "Age": to_float_or_nan(data.get("Age")),
+        "SibSp": int(data.get("SibSp") or 0),
+        "Parch": int(data.get("Parch") or 0),
+        "Fare": to_float_or_nan(data.get("Fare")),
+        "Embarked": data.get("Embarked") or None,
+    }])
+
+
+# API：單筆預測
+# POST /api/ml/predict
+@app.route("/api/ml/predict", methods=["POST"])
+def predict_single():
+    if CURRENT_MODEL is None:
+        return jsonify({"error": "尚未訓練模型，請先到模型訓練頁面完成訓練"}), 400
+
+    data = request.get_json()
+    X = build_feature_row(data)
+
+    survived = int(CURRENT_MODEL.predict(X)[0])
+    probability = float(CURRENT_MODEL.predict_proba(X)[0][1])
+
+    return jsonify({
+        "survived": survived,
+        "probability": probability
+    }), 200
+
+
+# API：CSV 批次預測
+# POST /api/ml/predict/batch
+@app.route("/api/ml/predict/batch", methods=["POST"])
+def predict_batch():
+    if CURRENT_MODEL is None:
+        return jsonify({"error": "尚未訓練模型，請先到模型訓練頁面完成訓練"}), 400
+
+    file = request.files.get("file")
+    if file is None:
+        return jsonify({"error": "請上傳 CSV 檔案"}), 400
+
+    df = pd.read_csv(file)
+
+    missing_cols = [c for c in FEATURE_COLUMNS if c not in df.columns]
+    if missing_cols:
+        return jsonify({"error": f"CSV 缺少欄位: {', '.join(missing_cols)}"}), 400
+
+    X = df[FEATURE_COLUMNS]
+
+    result_df = df.copy()
+    result_df["PredictedSurvived"] = CURRENT_MODEL.predict(X)
+    result_df["Probability"] = CURRENT_MODEL.predict_proba(X)[:, 1]
+
+    # 透過 to_json 再 loads 回來，確保 numpy 型別與 NaN 都能正確轉成 JSON 可序列化的型別
+    items = json.loads(result_df.to_json(orient="records"))
+
+    return jsonify({"items": items}), 200
+
+
+# ============================================================
+# 10. 啟動 Flask
 # ============================================================
 
 if __name__ == "__main__":

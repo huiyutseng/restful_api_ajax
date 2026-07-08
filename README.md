@@ -91,3 +91,4 @@ pip install -r requirements.txt
 - [Ollama](./ollama/README.md)
 - [Leaflet](./leaflet/README.md)
 - [E-book](./ebook/README.md)
+- [Titanic RESTful API + Ajax 機器學習訓練與預測](./titanic_restful_project/README.md)
