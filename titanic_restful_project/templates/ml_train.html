@@ -5,127 +5,542 @@
     <meta charset="UTF-8">
     <title>模型訓練</title>
     <style>
+        :root {
+            --page: #f4ecd8;
+            --surface: #faf4e6;
+            --ink: #1c1710;
+            --ink-2: #5b4f3a;
+            --ink-muted: #8a7b60;
+            --hairline: #ddd0b0;
+            --rule: #1c1710;
+            --good: #0ca30c;
+            --good-wash: #e4efdd;
+            --critical: #d03b3b;
+            --critical-wash: #f5e2e0;
+            --link: #5b4f3a;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --page: #14110c;
+                --surface: #1c1712;
+                --ink: #efe6cf;
+                --ink-2: #c9bc9c;
+                --ink-muted: #8a7b60;
+                --hairline: #372e21;
+                --rule: #efe6cf;
+                --good: #0ca30c;
+                --good-wash: #172417;
+                --critical: #d03b3b;
+                --critical-wash: #2a1a19;
+                --link: #c9bc9c;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            margin: 30px;
-            background-color: #000;
-            color: #e6e6e6;
+            font-family: Georgia, "Times New Roman", "Noto Serif TC", serif;
+            margin: 0;
+            padding: 30px 16px 60px;
+            background-color: var(--page);
+            color: var(--ink);
+            line-height: 1.6;
+        }
+
+        .sheet {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--surface);
+            border: 1px solid var(--hairline);
+            padding: 24px 30px 34px;
+        }
+
+        .kicker-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--ink-muted);
+            border-bottom: 1px solid var(--hairline);
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: clamp(26px, 4.5vw, 38px);
+            letter-spacing: 0.02em;
+            margin: 4px 0 10px;
+            border-bottom: 4px double var(--rule);
+            padding-bottom: 12px;
+        }
+
+        h2 {
+            font-size: 16px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            border-bottom: 2px solid var(--rule);
+            padding-bottom: 6px;
+            margin: 28px 0 12px;
+        }
+
+        p.nav-links {
+            text-align: center;
+            font-size: 13px;
+        }
+
+        a {
+            text-decoration: none;
+            color: var(--link);
+            border-bottom: 1px dotted var(--link);
+        }
+
+        a:hover {
+            border-bottom-style: solid;
+        }
+
+        .intro {
+            font-size: 14px;
+            color: var(--ink-2);
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            max-width: 100%;
         }
 
         table {
             border-collapse: collapse;
             width: 100%;
-            margin-top: 20px;
-            max-width: 800px;
+            margin-top: 10px;
+            min-width: 720px;
         }
 
         th,
         td {
-            border: 1px solid #444;
-            padding: 8px;
-            font-size: 14px;
+            border-bottom: 1px solid var(--hairline);
+            padding: 8px 10px;
+            font-size: 13.5px;
             text-align: left;
+            font-variant-numeric: tabular-nums;
         }
 
         th {
-            background-color: #222;
-            color: #fff;
+            border-bottom: 2px solid var(--rule);
+            color: var(--ink-2);
+            font-size: 11.5px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            font-weight: 700;
         }
 
         button {
-            padding: 8px 16px;
-            font-size: 15px;
-            background-color: #ADADAD;
-            color: #000;
-            border: none;
-            border-radius: 4px;
+            padding: 9px 20px;
+            font-size: 14.5px;
+            font-family: inherit;
+            letter-spacing: 0.04em;
+            background-color: var(--ink);
+            color: var(--surface);
+            border: 1px solid var(--ink);
             cursor: pointer;
         }
 
-        button:hover {
-            background-color: #c2c2c2;
+        button:hover:not(:disabled) {
+            background-color: var(--surface);
+            color: var(--ink);
         }
 
         button:disabled {
-            background-color: #555;
-            color: #ccc;
+            background-color: var(--hairline);
+            border-color: var(--hairline);
+            color: var(--ink-muted);
             cursor: not-allowed;
         }
 
         .status-box {
             margin-top: 20px;
-            padding: 12px;
-            border: 1px solid #444;
-            max-width: 800px;
+            padding: 12px 16px;
+            border: 1px solid var(--ink);
+            font-size: 14px;
         }
 
         .status-idle {
-            color: #aaa;
+            color: var(--ink-muted);
         }
 
         .status-training {
-            color: #e0a800;
-            font-weight: bold;
+            color: var(--ink-2);
+            font-weight: 700;
+            font-style: italic;
         }
 
         .status-done {
-            color: #4caf50;
-            font-weight: bold;
+            color: var(--good);
+            font-weight: 700;
         }
 
         .status-error {
-            color: #ff6b6b;
-            font-weight: bold;
+            color: var(--critical);
+            font-weight: 700;
         }
 
         .best-row {
-            background-color: #1f3d2b;
-            font-weight: bold;
+            background-color: var(--good-wash);
+            font-weight: 700;
         }
 
-        a {
-            text-decoration: none;
-            color: #8ab4f8;
+        .hp-section {
+            border: 1px solid var(--hairline);
+            padding: 14px 16px;
+            margin-top: 16px;
+        }
+
+        .hp-section h3 {
+            margin: 0 0 12px;
+            font-size: 13px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--hairline);
+            padding-bottom: 6px;
+        }
+
+        .hp-field {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-size: 13.5px;
+        }
+
+        .hp-field label {
+            width: 190px;
+            flex-shrink: 0;
+        }
+
+        .hp-field input[type="text"] {
+            flex: 1;
+            padding: 6px 8px;
+            background-color: var(--surface);
+            border: 1px solid var(--hairline);
+            color: var(--ink);
+            font-family: inherit;
+        }
+
+        .hp-field .hint {
+            font-size: 11.5px;
+            color: var(--ink-muted);
+        }
+
+        .hp-checkboxes {
+            display: flex;
+            gap: 16px;
+            font-size: 13.5px;
+        }
+
+        .hp-error {
+            color: var(--critical);
+            margin-top: 8px;
+            font-size: 13.5px;
+        }
+
+        /* ── metric stat tiles ─────────────────────────────── */
+        .metric-tiles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .metric-tile {
+            border: 1px solid var(--hairline);
+            border-top: 3px solid var(--ink);
+            padding: 10px 12px;
+            text-align: center;
+        }
+
+        .metric-tile .label {
+            font-size: 11px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--ink-muted);
+        }
+
+        .metric-tile .value {
+            font-family: "Arial Black", "Segoe UI", sans-serif;
+            font-weight: 900;
+            font-size: 26px;
+            margin-top: 4px;
+        }
+
+        /* ── ROC chart ─────────────────────────────────────── */
+        .frame {
+            border: 1px solid var(--ink);
+            padding: 4px;
+            margin-top: 12px;
+        }
+
+        .frame-inner {
+            border: 1px solid var(--hairline);
+            padding: 12px 8px 4px;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        svg.roc {
+            width: 100%;
+            height: auto;
+            min-width: 380px;
+            display: block;
+        }
+
+        .roc-grid line {
+            stroke: var(--hairline);
+            stroke-width: 1;
+        }
+
+        .roc-diag {
+            stroke: var(--ink-muted);
+            stroke-width: 1.5;
+            stroke-dasharray: 4 4;
+            fill: none;
+        }
+
+        .roc-area {
+            fill: var(--ink);
+            opacity: 0.08;
+        }
+
+        .roc-line {
+            stroke: var(--ink);
+            stroke-width: 2;
+            fill: none;
+            stroke-linejoin: round;
+            stroke-linecap: round;
+        }
+
+        .roc-op-dot {
+            fill: var(--critical);
+            stroke: var(--surface);
+            stroke-width: 2;
+        }
+
+        .roc-axis-label {
+            fill: var(--ink-2);
+            font-size: 11px;
+            font-family: Georgia, serif;
+        }
+
+        .roc-tick {
+            fill: var(--ink-muted);
+            font-size: 9.5px;
+            font-family: Georgia, serif;
+        }
+
+        .roc-hover-line {
+            stroke: var(--ink-muted);
+            stroke-width: 1;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .roc-hover-dot {
+            fill: var(--ink);
+            stroke: var(--surface);
+            stroke-width: 2;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .roc-tooltip {
+            position: absolute;
+            background: var(--ink);
+            color: var(--surface);
+            font-family: Georgia, serif;
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 3px;
+            pointer-events: none;
+            opacity: 0;
+            transform: translate(-50%, -110%);
+            white-space: nowrap;
+            z-index: 5;
+        }
+
+        .caption {
+            font-size: 12px;
+            color: var(--ink-2);
+            font-style: italic;
+            padding: 8px 6px 2px;
+        }
+
+        /* ── confusion matrix ──────────────────────────────── */
+        .verdict-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .verdict-cell {
+            border: 1px solid var(--hairline);
+            border-top: 4px solid var(--good);
+            padding: 10px 12px;
+        }
+
+        .verdict-cell.bad {
+            border-top-color: var(--critical);
+        }
+
+        .verdict-cell .tag {
+            font-size: 10.5px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--ink-muted);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 4px;
+        }
+
+        .verdict-cell .tag .icon {
+            color: var(--good);
+            font-weight: 700;
+        }
+
+        .verdict-cell.bad .tag .icon {
+            color: var(--critical);
+        }
+
+        .verdict-cell .count {
+            font-family: "Arial Black", "Segoe UI", sans-serif;
+            font-weight: 900;
+            font-size: 26px;
+            line-height: 1;
+            margin-bottom: 3px;
+        }
+
+        .verdict-cell .desc {
+            font-size: 11.5px;
+            color: var(--ink-2);
+        }
+
+        .axis-note {
+            font-size: 11px;
+            color: var(--ink-muted);
+            margin-top: 8px;
+            text-align: center;
         }
     </style>
 </head>
 
 <body>
-    <h1>機器學習模型訓練</h1>
-    <p><a href="/">回首頁</a> | <a href="/ml/predict">前往乘客生存預測</a></p>
+    <div class="sheet">
+        <div class="kicker-row">
+            <span>機器學習 · 超參數調整</span>
+            <span>titanic 資料表 · GridSearchCV</span>
+        </div>
 
-    <p>
-        點擊下方按鈕，會使用 <code>titanic</code> 資料表的所有資料，
-        分別對 RandomForest 與 LogisticRegression 兩種模型進行 GridSearchCV 超參數調整，
-        並自動挑選測試準確率較高的模型儲存起來，供預測頁面使用。
-    </p>
+        <h1>機器學習模型訓練</h1>
+        <p class="nav-links"><a href="/">回首頁</a> ｜ <a href="/ml/predict">前往乘客生存預測</a></p>
 
-    <button id="trainBtn" onclick="startTraining()">開始訓練</button>
+        <p class="intro">
+            點擊下方按鈕，會使用 <code>titanic</code> 資料表的所有資料，
+            分別對 RandomForest 與 LogisticRegression 兩種模型進行 GridSearchCV 超參數調整，
+            並自動挑選測試準確率較高的模型儲存起來，供預測頁面使用。
+            下方可自訂每個超參數要搜尋的候選值（逗號分隔），留空則使用預設值。
+        </p>
 
-    <div class="status-box">
-        <div>目前狀態：<span id="statusText" class="status-idle">尚未開始</span></div>
-        <div id="progressText"></div>
-        <div id="metaText"></div>
+        <div class="hp-section">
+            <h3>RandomForest 超參數候選值</h3>
+            <div class="hp-field">
+                <label for="rf_n_estimators">n_estimators</label>
+                <input type="text" id="rf_n_estimators" value="100,200,300">
+                <span class="hint">樹的數量，正整數</span>
+            </div>
+            <div class="hp-field">
+                <label for="rf_max_depth">max_depth</label>
+                <input type="text" id="rf_max_depth" value="None,5,10">
+                <span class="hint">樹的最大深度，None 代表不限制</span>
+            </div>
+            <div class="hp-field">
+                <label for="rf_min_samples_split">min_samples_split</label>
+                <input type="text" id="rf_min_samples_split" value="2,5,10">
+                <span class="hint">節點分裂所需的最小樣本數，&ge; 2</span>
+            </div>
+        </div>
+
+        <div class="hp-section">
+            <h3>LogisticRegression 超參數候選值</h3>
+            <div class="hp-field">
+                <label for="lr_C">C</label>
+                <input type="text" id="lr_C" value="0.01,0.1,1,10">
+                <span class="hint">正則化強度倒數，數值越小正則化越強</span>
+            </div>
+            <div class="hp-field">
+                <label>class_weight</label>
+                <span class="hp-checkboxes">
+                    <label><input type="checkbox" id="lr_cw_none" checked> None</label>
+                    <label><input type="checkbox" id="lr_cw_balanced" checked> balanced</label>
+                </span>
+            </div>
+        </div>
+
+        <div id="hpError" class="hp-error"></div>
+
+        <p><button id="trainBtn" onclick="startTraining()">開始訓練</button></p>
+
+        <div class="status-box">
+            <div>目前狀態：<span id="statusText" class="status-idle">尚未開始</span></div>
+            <div id="progressText"></div>
+            <div id="metaText"></div>
+        </div>
+
+        <div id="resultArea"></div>
     </div>
-
-    <div id="resultArea"></div>
 
     <script>
         let pollTimer = null;
 
+        // 從表單收集使用者自訂的超參數候選值，組成要送給後端的 JSON body
+        function collectParamGrids() {
+            const classWeightValues = [];
+            if (document.getElementById("lr_cw_none").checked) classWeightValues.push("None");
+            if (document.getElementById("lr_cw_balanced").checked) classWeightValues.push("balanced");
+
+            return {
+                RandomForest: {
+                    n_estimators: document.getElementById("rf_n_estimators").value,
+                    max_depth: document.getElementById("rf_max_depth").value,
+                    min_samples_split: document.getElementById("rf_min_samples_split").value,
+                },
+                LogisticRegression: {
+                    C: document.getElementById("lr_C").value,
+                    class_weight: classWeightValues.join(","),
+                }
+            };
+        }
+
         // 點擊「開始訓練」按鈕，呼叫後端 API 啟動背景訓練
         async function startTraining() {
             const trainBtn = document.getElementById("trainBtn");
+            const hpError = document.getElementById("hpError");
+            hpError.textContent = "";
             trainBtn.disabled = true;
 
             const response = await fetch("/api/ml/train", {
-                method: "POST"
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(collectParamGrids())
             });
 
             const result = await response.json();
 
             if (!response.ok) {
-                alert(result.error || "啟動訓練失敗");
+                hpError.textContent = result.error || "啟動訓練失敗";
                 trainBtn.disabled = false;
                 return;
             }
@@ -195,7 +610,19 @@
             renderResult(state);
         }
 
-        // 訓練完成後，顯示每個候選模型的最佳超參數與準確率比較表
+        // 把 param_grid 的 key 去掉 "clf__" 前綴，方便顯示給使用者看
+        function formatParamGrid(paramGrid) {
+            if (!paramGrid) return "";
+            const entries = Object.entries(paramGrid).map(
+                ([key, values]) => `${key.replace(/^clf__/, "")}: [${values.map(v => v === null ? "None" : v).join(", ")}]`
+            );
+            return entries.join("；");
+        }
+
+        const pct = (v, d = 1) => (v == null ? "—" : (v * 100).toFixed(d) + "%");
+
+        // 訓練完成後，顯示每個候選模型搜尋過的超參數範圍、最佳超參數與各項評估指標比較表，
+        // 並針對最終挑選出來的最佳模型畫出 ROC 曲線與混淆矩陣。
         function renderResult(state) {
             const resultArea = document.getElementById("resultArea");
 
@@ -205,7 +632,6 @@
             }
 
             let rows = "";
-
             for (const [name, info] of Object.entries(state.candidates)) {
                 const isBest = name === state.best_model_name;
                 const paramsText = JSON.stringify(info.best_params);
@@ -213,27 +639,192 @@
                 rows += `
                     <tr class="${isBest ? "best-row" : ""}">
                         <td>${name}${isBest ? "（最佳模型，已儲存）" : ""}</td>
+                        <td>${formatParamGrid(info.param_grid)}</td>
                         <td>${paramsText}</td>
-                        <td>${(info.cv_score * 100).toFixed(2)}%</td>
-                        <td>${(info.test_accuracy * 100).toFixed(2)}%</td>
+                        <td>${pct(info.cv_score, 2)}</td>
+                        <td>${pct(info.test_accuracy, 2)}</td>
+                        <td>${pct(info.precision, 2)}</td>
+                        <td>${pct(info.recall, 2)}</td>
+                        <td>${pct(info.f1, 2)}</td>
+                        <td>${info.auc == null ? "—" : info.auc.toFixed(3)}</td>
                     </tr>
                 `;
             }
 
+            const best = state.candidates[state.best_model_name] || {};
+
             resultArea.innerHTML = `
                 <h2>超參數調整結果</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>模型</th>
-                            <th>最佳超參數</th>
-                            <th>交叉驗證準確率</th>
-                            <th>測試集準確率</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>模型</th>
+                                <th>搜尋範圍</th>
+                                <th>最佳超參數</th>
+                                <th>交叉驗證準確率</th>
+                                <th>測試集準確率</th>
+                                <th>Precision</th>
+                                <th>Recall</th>
+                                <th>F1</th>
+                                <th>AUC</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+
+                <h2>最佳模型指標（${state.best_model_name}）</h2>
+                <div class="metric-tiles">
+                    <div class="metric-tile"><div class="label">Accuracy</div><div class="value">${pct(best.test_accuracy)}</div></div>
+                    <div class="metric-tile"><div class="label">Precision</div><div class="value">${pct(best.precision)}</div></div>
+                    <div class="metric-tile"><div class="label">Recall</div><div class="value">${pct(best.recall)}</div></div>
+                    <div class="metric-tile"><div class="label">F1</div><div class="value">${pct(best.f1)}</div></div>
+                    <div class="metric-tile"><div class="label">AUC</div><div class="value">${best.auc == null ? "—" : best.auc.toFixed(3)}</div></div>
+                </div>
+
+                <h2>ROC 曲線</h2>
+                <div class="frame">
+                    <div class="frame-inner" id="rocFrame">
+                        <svg class="roc" id="rocSvg" viewBox="0 0 480 300" role="img" aria-label="ROC 曲線圖，橫軸為假陽性率，縱軸為真陽性率"></svg>
+                        <div class="roc-tooltip" id="rocTooltip"></div>
+                    </div>
+                    <div class="caption">
+                        橫軸為假陽性率（FPR）、縱軸為真陽性率（TPR）。曲線離左上角越近、離灰色虛線（隨機猜測基準）越遠，
+                        代表模型越能區分「會生還」與「不會生還」的乘客。紅點為目前實際使用的判斷門檻（機率 &ge; 0.5）。
+                    </div>
+                </div>
+
+                <h2>混淆矩陣</h2>
+                <div id="verdictGrid" class="verdict-grid"></div>
+                <div class="axis-note">列：實際結果　｜　欄：模型預測結果　（正類 = 生還 Survived）</div>
             `;
+
+            if (best.roc_points) {
+                renderRocChart(best.roc_points, best.confusion_matrix);
+            }
+            if (best.confusion_matrix) {
+                renderConfusionMatrix(best.confusion_matrix);
+            }
+        }
+
+        // 畫出最佳模型的 ROC 曲線（含格線、隨機基準線、面積填色、目前門檻點與滑鼠提示）
+        function renderRocChart(rocPoints, confusionMatrix) {
+            const svg = document.getElementById("rocSvg");
+            const NS = "http://www.w3.org/2000/svg";
+            const W = 480, H = 300;
+            const pad = { l: 42, r: 16, t: 14, b: 34 };
+            const plotW = W - pad.l - pad.r, plotH = H - pad.t - pad.b;
+            const x = (fpr) => pad.l + fpr * plotW;
+            const y = (tpr) => pad.t + (1 - tpr) * plotH;
+
+            function el(tag, attrs) {
+                const e = document.createElementNS(NS, tag);
+                for (const k in attrs) e.setAttribute(k, attrs[k]);
+                return e;
+            }
+
+            svg.innerHTML = "";
+
+            const gridG = el("g", { class: "roc-grid" });
+            [0, 0.25, 0.5, 0.75, 1].forEach(t => {
+                gridG.appendChild(el("line", { x1: x(0), x2: x(1), y1: y(t), y2: y(t) }));
+                gridG.appendChild(el("line", { x1: x(t), x2: x(t), y1: y(0), y2: y(1) }));
+                const tickY = el("text", { class: "roc-tick", x: pad.l - 6, y: y(t) + 3, "text-anchor": "end" });
+                tickY.textContent = t.toFixed(2);
+                gridG.appendChild(tickY);
+                const tickX = el("text", { class: "roc-tick", x: x(t), y: y(0) + 16, "text-anchor": "middle" });
+                tickX.textContent = t.toFixed(2);
+                gridG.appendChild(tickX);
+            });
+            svg.appendChild(gridG);
+
+            const xLabel = el("text", { class: "roc-axis-label", x: pad.l + plotW / 2, y: H - 4, "text-anchor": "middle" });
+            xLabel.textContent = "假陽性率 FPR";
+            svg.appendChild(xLabel);
+            const yLabel = el("text", { class: "roc-axis-label", x: -(pad.t + plotH / 2), y: 14, "text-anchor": "middle", transform: "rotate(-90)" });
+            yLabel.textContent = "真陽性率 TPR";
+            svg.appendChild(yLabel);
+
+            svg.appendChild(el("path", { class: "roc-diag", d: `M ${x(0)} ${y(0)} L ${x(1)} ${y(1)}` }));
+
+            const linePath = rocPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.fpr).toFixed(2)} ${y(p.tpr).toFixed(2)}`).join(" ");
+            const areaPath = `${linePath} L ${x(1)} ${y(0)} L ${x(0)} ${y(0)} Z`;
+            svg.appendChild(el("path", { class: "roc-area", d: areaPath }));
+            svg.appendChild(el("path", { class: "roc-line", d: linePath }));
+
+            if (confusionMatrix) {
+                const [[tn, fp], [fn, tp]] = confusionMatrix;
+                const opFpr = fp / (fp + tn);
+                const opTpr = tp / (tp + fn);
+                svg.appendChild(el("circle", { class: "roc-op-dot", cx: x(opFpr), cy: y(opTpr), r: 5 }));
+                const opLabel = el("text", { class: "roc-axis-label", x: x(opFpr) + 8, y: y(opTpr) - 8 });
+                opLabel.textContent = "門檻 0.5";
+                svg.appendChild(opLabel);
+            }
+
+            const hoverV = el("line", { class: "roc-hover-line" });
+            const hoverDot = el("circle", { class: "roc-hover-dot", r: 4 });
+            svg.appendChild(hoverV);
+            svg.appendChild(hoverDot);
+
+            const tooltip = document.getElementById("rocTooltip");
+            const wrap = document.getElementById("rocFrame");
+
+            function nearestPoint(fprTarget) {
+                let best = rocPoints[0], bestD = Infinity;
+                for (const p of rocPoints) {
+                    const d = Math.abs(p.fpr - fprTarget);
+                    if (d < bestD) { bestD = d; best = p; }
+                }
+                return best;
+            }
+
+            svg.onmousemove = (ev) => {
+                const rect = svg.getBoundingClientRect();
+                const scaleX = W / rect.width;
+                const mx = (ev.clientX - rect.left) * scaleX;
+                const fprAtMouse = Math.min(1, Math.max(0, (mx - pad.l) / plotW));
+                const p = nearestPoint(fprAtMouse);
+
+                hoverV.setAttribute("x1", x(p.fpr)); hoverV.setAttribute("x2", x(p.fpr));
+                hoverV.setAttribute("y1", pad.t); hoverV.setAttribute("y2", y(0));
+                hoverV.style.opacity = 1;
+                hoverDot.setAttribute("cx", x(p.fpr)); hoverDot.setAttribute("cy", y(p.tpr));
+                hoverDot.style.opacity = 1;
+
+                const wrapRect = wrap.getBoundingClientRect();
+                const px = (x(p.fpr) / W) * rect.width + (rect.left - wrapRect.left);
+                const py = (y(p.tpr) / H) * rect.height + (rect.top - wrapRect.top);
+                tooltip.style.left = px + "px";
+                tooltip.style.top = py + "px";
+                tooltip.textContent = `FPR ${p.fpr.toFixed(3)} ・ TPR ${p.tpr.toFixed(3)}`;
+                tooltip.style.opacity = 1;
+            };
+            svg.onmouseleave = () => {
+                hoverV.style.opacity = 0;
+                hoverDot.style.opacity = 0;
+                tooltip.style.opacity = 0;
+            };
+        }
+
+        // 畫出最佳模型的混淆矩陣（2x2 判決卡片：TN / FP / FN / TP）
+        function renderConfusionMatrix(confusionMatrix) {
+            const [[tn, fp], [fn, tp]] = confusionMatrix;
+            const total = tn + fp + fn + tp;
+            const cells = [
+                { good: true, n: tn, tag: "預測死亡・實際死亡", desc: `正確判定罹難（佔全體 ${(tn / total * 100).toFixed(1)}%）` },
+                { good: false, n: fp, tag: "預測生還・實際死亡", desc: `誤判為生還（佔全體 ${(fp / total * 100).toFixed(1)}%）` },
+                { good: false, n: fn, tag: "預測死亡・實際生還", desc: `誤判為罹難（佔全體 ${(fn / total * 100).toFixed(1)}%）` },
+                { good: true, n: tp, tag: "預測生還・實際生還", desc: `正確判定生還（佔全體 ${(tp / total * 100).toFixed(1)}%）` },
+            ];
+            document.getElementById("verdictGrid").innerHTML = cells.map(c => `
+                <div class="verdict-cell ${c.good ? "" : "bad"}">
+                    <div class="tag"><span class="icon">${c.good ? "✓" : "✕"}</span>${c.tag}</div>
+                    <div class="count">${c.n}</div>
+                    <div class="desc">${c.desc}</div>
+                </div>
+            `).join("");
         }
 
         // 頁面載入時，先查詢一次目前狀態（可能是先前訓練完成的結果，或正在訓練中）

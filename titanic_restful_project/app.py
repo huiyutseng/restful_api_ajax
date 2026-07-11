@@ -4,6 +4,7 @@ import json
 import threading
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 import joblib
 from flask import Flask, jsonify, request, render_template
@@ -15,7 +16,15 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    roc_curve,
+    confusion_matrix,
+)
 
 app = Flask(__name__)
 
@@ -348,7 +357,7 @@ def build_preprocessor():
     ])
 
 
-# 兩個候選模型與各自要調整的超參數網格
+# 兩個候選模型與各自要調整的超參數網格（預設值，前端可覆寫）
 MODEL_CONFIGS = {
     "RandomForest": {
         "estimator": RandomForestClassifier(random_state=42),
@@ -366,6 +375,76 @@ MODEL_CONFIGS = {
         },
     },
 }
+
+# 每個超參數欄位的型別與限制，用於解析、驗證前端傳來的自訂候選值
+PARAM_FIELD_SPECS = {
+    "RandomForest": {
+        "n_estimators": {"type": "int", "min": 1},
+        "max_depth": {"type": "int_or_none"},
+        "min_samples_split": {"type": "int", "min": 2},
+    },
+    "LogisticRegression": {
+        "C": {"type": "float", "min": 0.0001},
+        "class_weight": {"type": "choice", "choices": [None, "balanced"]},
+    },
+}
+
+# 網格搜尋組合數上限，避免使用者選了太多候選值導致訓練時間過長
+MAX_GRID_COMBINATIONS = 60
+
+
+def parse_param_values(raw, spec):
+    """把前端傳來的單一超參數候選值（逗號分隔字串或陣列）解析成正確型別的清單。"""
+    if raw is None or raw == "":
+        return None
+
+    parts = raw if isinstance(raw, list) else str(raw).split(",")
+    parts = [str(p).strip() for p in parts if str(p).strip() != ""]
+    if not parts:
+        return None
+
+    values = []
+    for p in parts:
+        if spec["type"] == "int":
+            v = int(p)
+            if "min" in spec and v < spec["min"]:
+                raise ValueError(f"數值 {v} 小於允許的最小值 {spec['min']}")
+            values.append(v)
+        elif spec["type"] == "int_or_none":
+            values.append(None if p.lower() == "none" else int(p))
+        elif spec["type"] == "float":
+            v = float(p)
+            if "min" in spec and v < spec["min"]:
+                raise ValueError(f"數值 {v} 小於允許的最小值 {spec['min']}")
+            values.append(v)
+        elif spec["type"] == "choice":
+            choice = None if p.lower() == "none" else p
+            if choice not in spec["choices"]:
+                raise ValueError(f"不支援的值：{p}")
+            values.append(choice)
+
+    # 去除重複值，並保留原本的順序
+    unique_values = []
+    for v in values:
+        if v not in unique_values:
+            unique_values.append(v)
+
+    return unique_values
+
+
+def build_param_grid(model_name, raw_fields):
+    """根據前端傳來的自訂欄位，組出 GridSearchCV 用的 param_grid；沒有提供或無效的欄位則使用預設值。"""
+    default_grid = MODEL_CONFIGS[model_name]["param_grid"]
+    field_specs = PARAM_FIELD_SPECS[model_name]
+    raw_fields = raw_fields or {}
+
+    param_grid = {}
+    for field, spec in field_specs.items():
+        key = f"clf__{field}"
+        values = parse_param_values(raw_fields.get(field), spec)
+        param_grid[key] = values if values is not None else default_grid[key]
+
+    return param_grid
 
 # 模型存放路徑：repo 根目錄下的 models/ 資料夾
 MODEL_DIR = os.path.normpath(
@@ -391,6 +470,12 @@ TRAIN_STATE = {
     "best_params": None,
     "cv_score": None,
     "test_accuracy": None,
+    "precision": None,
+    "recall": None,
+    "f1": None,
+    "auc": None,
+    "confusion_matrix": None,
+    "roc_points": None,
     "n_samples": None,
     "error": None,
 }
@@ -414,8 +499,18 @@ def load_saved_model():
 load_saved_model()
 
 
-def run_training():
-    """在背景執行緒執行：讀取 titanic 資料表 -> 對兩個候選模型做 GridSearchCV -> 挑最佳者存檔。"""
+def compute_roc_points(y_true, y_proba, max_points=60):
+    """計算 ROC 曲線座標點，並取樣到最多 max_points 個點，避免傳給前端的資料過大。"""
+    fpr, tpr, _ = roc_curve(y_true, y_proba)
+    idx = sorted(set(np.linspace(0, len(fpr) - 1, min(max_points, len(fpr))).astype(int).tolist()))
+    return [{"fpr": float(fpr[i]), "tpr": float(tpr[i])} for i in idx]
+
+
+def run_training(param_grids):
+    """在背景執行緒執行：讀取 titanic 資料表 -> 對兩個候選模型做 GridSearchCV -> 挑最佳者存檔。
+
+    param_grids: {模型名稱: param_grid}，由呼叫端（API route）先解析並驗證好。
+    """
     global CURRENT_MODEL
 
     with TRAIN_LOCK:
@@ -442,6 +537,12 @@ def run_training():
         best_pipeline = None
         best_params = None
         best_cv_score = None
+        best_precision = None
+        best_recall = None
+        best_f1 = None
+        best_auc = None
+        best_confusion_matrix = None
+        best_roc_points = None
 
         for name, config in MODEL_CONFIGS.items():
             with TRAIN_LOCK:
@@ -452,22 +553,40 @@ def run_training():
                 ("clf", config["estimator"]),
             ])
 
+            param_grid = param_grids[name]
+
             grid = GridSearchCV(
                 pipeline,
-                config["param_grid"],
+                param_grid,
                 cv=5,
                 scoring="accuracy",
-                n_jobs=-1,
+                n_jobs=1,
             )
             grid.fit(X_train, y_train)
 
-            test_acc = float(accuracy_score(y_test, grid.predict(X_test)))
+            y_pred = grid.predict(X_test)
+            y_proba = grid.predict_proba(X_test)[:, 1]
+
+            test_acc = float(accuracy_score(y_test, y_pred))
             cv_score = float(grid.best_score_)
+            precision = float(precision_score(y_test, y_pred, zero_division=0))
+            recall = float(recall_score(y_test, y_pred, zero_division=0))
+            f1 = float(f1_score(y_test, y_pred, zero_division=0))
+            auc = float(roc_auc_score(y_test, y_proba))
+            cm = confusion_matrix(y_test, y_pred).tolist()
+            roc_points = compute_roc_points(y_test, y_proba)
 
             candidates[name] = {
+                "param_grid": param_grid,
                 "best_params": grid.best_params_,
                 "cv_score": cv_score,
                 "test_accuracy": test_acc,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "auc": auc,
+                "confusion_matrix": cm,
+                "roc_points": roc_points,
             }
 
             if test_acc > best_test_acc:
@@ -476,6 +595,12 @@ def run_training():
                 best_pipeline = grid.best_estimator_
                 best_params = grid.best_params_
                 best_cv_score = cv_score
+                best_precision = precision
+                best_recall = recall
+                best_f1 = f1
+                best_auc = auc
+                best_confusion_matrix = cm
+                best_roc_points = roc_points
 
         joblib.dump(best_pipeline, MODEL_PATH)
 
@@ -485,6 +610,12 @@ def run_training():
             "best_params": best_params,
             "cv_score": best_cv_score,
             "test_accuracy": best_test_acc,
+            "precision": best_precision,
+            "recall": best_recall,
+            "f1": best_f1,
+            "auc": best_auc,
+            "confusion_matrix": best_confusion_matrix,
+            "roc_points": best_roc_points,
             "n_samples": len(df),
         }
 
@@ -509,13 +640,37 @@ def run_training():
 
 # API：一鍵開始訓練（背景執行，立即回應）
 # POST /api/ml/train
+# body（可省略，省略則使用預設超參數網格）：
+# {
+#   "RandomForest": {"n_estimators": "100,200,300", "max_depth": "None,5,10", "min_samples_split": "2,5,10"},
+#   "LogisticRegression": {"C": "0.01,0.1,1,10", "class_weight": "None,balanced"}
+# }
 @app.route("/api/ml/train", methods=["POST"])
 def start_training():
+    body = request.get_json(silent=True) or {}
+
+    try:
+        param_grids = {
+            name: build_param_grid(name, body.get(name))
+            for name in MODEL_CONFIGS
+        }
+    except ValueError as e:
+        return jsonify({"error": f"超參數格式錯誤：{e}"}), 400
+
+    for name, grid in param_grids.items():
+        combo_count = 1
+        for values in grid.values():
+            combo_count *= len(values)
+        if combo_count > MAX_GRID_COMBINATIONS:
+            return jsonify({
+                "error": f"{name} 的超參數組合數（{combo_count}）過多，請減少候選值數量（上限 {MAX_GRID_COMBINATIONS}）"
+            }), 400
+
     with TRAIN_LOCK:
         if TRAIN_STATE["status"] == "training":
             return jsonify({"error": "已有訓練正在進行中，請稍候"}), 409
 
-    thread = threading.Thread(target=run_training, daemon=True)
+    thread = threading.Thread(target=run_training, args=(param_grids,), daemon=True)
     thread.start()
 
     return jsonify({"message": "started"}), 202
