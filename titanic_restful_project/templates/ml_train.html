@@ -8,6 +8,8 @@
         body {
             font-family: Arial, sans-serif;
             margin: 30px;
+            background-color: #000;
+            color: #e6e6e6;
         }
 
         table {
@@ -19,55 +21,71 @@
 
         th,
         td {
-            border: 1px solid #ccc;
+            border: 1px solid #444;
             padding: 8px;
             font-size: 14px;
             text-align: left;
         }
 
         th {
-            background-color: #f2f2f2;
+            background-color: #222;
+            color: #fff;
         }
 
         button {
             padding: 8px 16px;
             font-size: 15px;
+            background-color: #ADADAD;
+            color: #000;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #c2c2c2;
+        }
+
+        button:disabled {
+            background-color: #555;
+            color: #ccc;
+            cursor: not-allowed;
         }
 
         .status-box {
             margin-top: 20px;
             padding: 12px;
-            border: 1px solid #ccc;
+            border: 1px solid #444;
             max-width: 800px;
         }
 
         .status-idle {
-            color: #666;
+            color: #aaa;
         }
 
         .status-training {
-            color: #b8860b;
+            color: #e0a800;
             font-weight: bold;
         }
 
         .status-done {
-            color: green;
+            color: #4caf50;
             font-weight: bold;
         }
 
         .status-error {
-            color: red;
+            color: #ff6b6b;
             font-weight: bold;
         }
 
         .best-row {
-            background-color: #eaffea;
+            background-color: #1f3d2b;
             font-weight: bold;
         }
 
         a {
             text-decoration: none;
-            color: blue;
+            color: #8ab4f8;
         }
     </style>
 </head>
