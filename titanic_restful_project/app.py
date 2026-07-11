@@ -15,7 +15,6 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -357,7 +356,7 @@ def build_preprocessor():
     ])
 
 
-# 兩個候選模型與各自要調整的超參數網格（預設值，前端可覆寫）
+# 候選模型與要調整的超參數網格（預設值，前端可覆寫）
 MODEL_CONFIGS = {
     "RandomForest": {
         "estimator": RandomForestClassifier(random_state=42),
@@ -365,13 +364,6 @@ MODEL_CONFIGS = {
             "clf__n_estimators": [100, 200, 300],
             "clf__max_depth": [None, 5, 10],
             "clf__min_samples_split": [2, 5, 10],
-        },
-    },
-    "LogisticRegression": {
-        "estimator": LogisticRegression(max_iter=1000, solver="lbfgs"),
-        "param_grid": {
-            "clf__C": [0.01, 0.1, 1, 10],
-            "clf__class_weight": [None, "balanced"],
         },
     },
 }
@@ -382,10 +374,6 @@ PARAM_FIELD_SPECS = {
         "n_estimators": {"type": "int", "min": 1},
         "max_depth": {"type": "int_or_none"},
         "min_samples_split": {"type": "int", "min": 2},
-    },
-    "LogisticRegression": {
-        "C": {"type": "float", "min": 0.0001},
-        "class_weight": {"type": "choice", "choices": [None, "balanced"]},
     },
 }
 
@@ -560,7 +548,7 @@ def run_training(param_grids):
                 param_grid,
                 cv=5,
                 scoring="accuracy",
-                n_jobs=1,
+                n_jobs=-1,
             )
             grid.fit(X_train, y_train)
 
@@ -642,8 +630,7 @@ def run_training(param_grids):
 # POST /api/ml/train
 # body（可省略，省略則使用預設超參數網格）：
 # {
-#   "RandomForest": {"n_estimators": "100,200,300", "max_depth": "None,5,10", "min_samples_split": "2,5,10"},
-#   "LogisticRegression": {"C": "0.01,0.1,1,10", "class_weight": "None,balanced"}
+#   "RandomForest": {"n_estimators": "100,200,300", "max_depth": "None,5,10", "min_samples_split": "2,5,10"}
 # }
 @app.route("/api/ml/train", methods=["POST"])
 def start_training():

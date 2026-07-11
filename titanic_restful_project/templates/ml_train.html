@@ -449,8 +449,8 @@
 
         <p class="intro">
             點擊下方按鈕，會使用 <code>titanic</code> 資料表的所有資料，
-            分別對 RandomForest 與 LogisticRegression 兩種模型進行 GridSearchCV 超參數調整，
-            並自動挑選測試準確率較高的模型儲存起來，供預測頁面使用。
+            對 RandomForest 模型進行 GridSearchCV 超參數調整，
+            並將測試準確率最高的參數組合訓練出的模型儲存起來，供預測頁面使用。
             下方可自訂每個超參數要搜尋的候選值（逗號分隔），留空則使用預設值。
         </p>
 
@@ -473,22 +473,6 @@
             </div>
         </div>
 
-        <div class="hp-section">
-            <h3>LogisticRegression 超參數候選值</h3>
-            <div class="hp-field">
-                <label for="lr_C">C</label>
-                <input type="text" id="lr_C" value="0.01,0.1,1,10">
-                <span class="hint">正則化強度倒數，數值越小正則化越強</span>
-            </div>
-            <div class="hp-field">
-                <label>class_weight</label>
-                <span class="hp-checkboxes">
-                    <label><input type="checkbox" id="lr_cw_none" checked> None</label>
-                    <label><input type="checkbox" id="lr_cw_balanced" checked> balanced</label>
-                </span>
-            </div>
-        </div>
-
         <div id="hpError" class="hp-error"></div>
 
         <p><button id="trainBtn" onclick="startTraining()">開始訓練</button></p>
@@ -507,20 +491,12 @@
 
         // 從表單收集使用者自訂的超參數候選值，組成要送給後端的 JSON body
         function collectParamGrids() {
-            const classWeightValues = [];
-            if (document.getElementById("lr_cw_none").checked) classWeightValues.push("None");
-            if (document.getElementById("lr_cw_balanced").checked) classWeightValues.push("balanced");
-
             return {
                 RandomForest: {
                     n_estimators: document.getElementById("rf_n_estimators").value,
                     max_depth: document.getElementById("rf_max_depth").value,
                     min_samples_split: document.getElementById("rf_min_samples_split").value,
                 },
-                LogisticRegression: {
-                    C: document.getElementById("lr_C").value,
-                    class_weight: classWeightValues.join(","),
-                }
             };
         }
 
